@@ -1,0 +1,59 @@
+x-app-defaults: &app-defaults
+  restart: unless-stopped
+  volumes:
+    - ../Data/podify:/storage
+  depends_on:
+    - db
+    - redis
+  environment: &app-env
+    URL_HOST: https://podify.yourdomain.com
+    DATABASE_URL: postgres://podify:verysecurepassword@db/podify
+    SECRET_KEY_BASE: a57d57661ef5df58b46fab6f04304e89108f22f89b31d2242b31891102da87d519a1f3c6459c1d2716b3b8c5438ef43e06ed4c29c8fb059eb650dc2ec0062d57
+    INITIAL_USER_EMAIL: you@example.com
+    INITIAL_USER_PASSWORD: yourpassword
+    RAILS_LOG_TO_STDOUT: "yes"
+    STORAGE_DIR: /storage
+    ENABLE_SIGNUP: "no"
+    REDIS_URL: redis://redis
+services:
+  web:
+    image: maxhollmann/podify-web:latest
+    container_name: podify-web
+    hostname: podify-web
+    environment:
+      <<: *app-env
+    <<: *app-defaults
+    labels:
+      # Traefik Labels
+      - "traefik.enable=true"
+      # HTTPS Labels
+      - "traefik.http.routers.podify-web.rule=Host(`localhost`)" # Domain Name
+      - "traefik.http.routers.podify-web.entrypoints=web-secure"
+      - "traefik.http.routers.podify-web.middlewares=podify-headers@docker"
+      - "traefik.http.routers.podify-web.service=podify-web"
+      - "traefik.http.routers.podify-web.tls=true"
+      - "traefik.http.services.podify-web.loadbalancer.server.port=3000" # Proxied Port
+      - "traefik.http.middlewares.podify-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+  worker:
+    image: maxhollmann/podify-worker:latest
+    container_name: podify-worker
+    hostname: podify-worker
+    environment:
+      <<: *app-env
+    <<: *app-defaults
+  db:
+    image: postgres:12.3
+    container_name: postgres
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: podify
+      POSTGRES_PASSWORD: verysecurepassword
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ../Data/postgres:/var/lib/postgresql/data/pgdata
+  redis:
+    image: redis:6
+    container_name: redis
+    hostname: redis
+    restart: unless-stopped
